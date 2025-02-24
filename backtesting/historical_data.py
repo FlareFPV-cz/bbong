@@ -7,7 +7,7 @@ class HistoricalData:
     def __init__(self, symbol, interval='1m', start_date=None, end_date=None):
         self.symbol = symbol.upper()
         self.interval = interval
-        self.start_date = start_date or (datetime.now() - timedelta(days=100))
+        self.start_date = start_date or (datetime.now() - timedelta(days=10))
         self.end_date = end_date or datetime.now()
         self.client = Client()
         
@@ -22,7 +22,24 @@ class HistoricalData:
             '4h': Client.KLINE_INTERVAL_4HOUR,
             '1d': Client.KLINE_INTERVAL_1DAY,
         }
-
+    async def simulate_streaming(self):
+        df = await self.get_historical_data()
+        if df is None:
+            return
+        
+        for timestamp, row in df.iterrows():
+            kline_data = {
+                'timestamp': timestamp,
+                'open': float(row['open']),
+                'high': float(row['high']),
+                'low': float(row['low']),
+                'close': float(row['close']),
+                'volume': float(row['volume']),
+                'trades': int(row['trades']),
+                'interval': self.interval
+            }
+            yield kline_data
+            
     async def get_historical_data(self):
         try:
             binance_interval = self.interval_map.get(self.interval, Client.KLINE_INTERVAL_1MINUTE)

@@ -2,8 +2,8 @@ from collections import deque
 from utils.logger import strategy_logger as logger
 import numpy as np
 
-class MovingAverageCrossover:
-    def __init__(self, short_window=8, long_window=21, trend_window=50, min_trend_strength=0.002, rsi_period=14, timeframe='1m', atr_period=14, risk_per_trade=0.01):
+class MomentumSurge:
+    def __init__(self, short_window=2, long_window=10, trend_window=15, min_trend_strength=0.005, rsi_period=10, timeframe='1m', atr_period=10, risk_per_trade=0.03):
         self.short_window = short_window
         self.long_window = long_window
         self.trend_window = trend_window
@@ -29,7 +29,7 @@ class MovingAverageCrossover:
         self.stop_loss = None
         self.take_profit = None
         
-        logger.info(f"Initialized MovingAverageCrossover with enhanced parameters")
+        logger.info(f"Initialized MomentumSurge with aggressive parameters")
 
     def _get_timeframe_ms(self, timeframe):
         unit = timeframe[-1]
@@ -38,16 +38,25 @@ class MovingAverageCrossover:
             return value * 60 * 1000
         elif unit == 'h':
             return value * 60 * 60 * 1000
-        return 60 * 1000  
+        return 60 * 1000 
 
-    def update(self, price, timestamp=None):
-        if self.current_candle['open'] is None:
-            self.current_candle = {'open': price, 'high': price, 'low': price, 'close': price, 'volume': 0}
-            self.last_update = timestamp
+    def update(self, price, timestamp=None, candle=None):
+        if candle:
+            self.current_candle = candle
+            candle_price = candle['close']
+            self.short_ma.append(candle_price)
+            self.long_ma.append(candle_price)
+            self.trend_ma.append(candle_price)
+            self.price_history.append(candle_price)
+            self.update_atr(candle_price)
         else:
-            self.current_candle['high'] = max(self.current_candle['high'], price)
-            self.current_candle['low'] = min(self.current_candle['low'], price)
-            self.current_candle['close'] = price
+            if self.current_candle['open'] is None:
+                self.current_candle = {'open': price, 'high': price, 'low': price, 'close': price, 'volume': 0}
+                self.last_update = timestamp
+            else:
+                self.current_candle['high'] = max(self.current_candle['high'], price)
+                self.current_candle['low'] = min(self.current_candle['low'], price)
+                self.current_candle['close'] = price
 
         if timestamp and self.last_update and (timestamp - self.last_update >= self.timeframe_ms):
             candle_price = self.current_candle['close']
@@ -75,18 +84,18 @@ class MovingAverageCrossover:
 
             if abs(trend_strength) >= self.min_trend_strength:
                 if (short_avg > long_avg and trend_strength > 0 and 
-                    self.position != "buy" and rsi < 70):
+                    self.position != "buy" and rsi > 50):
                     self.entry_price = price
-                    self.stop_loss = price - 2 * atr
-                    self.take_profit = price + 4 * atr
+                    self.stop_loss = price - 1 * atr 
+                    self.take_profit = price + 2 * atr  
                     logger.info(f"Buy signal - MA cross with RSI: {rsi:.2f}, ATR: {atr:.8f}")
                     self.position = "buy"
                     return "buy"
                 elif (short_avg < long_avg and trend_strength < 0 and 
-                      self.position != "sell" and rsi > 30):
+                      self.position != "sell" and rsi < 50): 
                     self.entry_price = price
-                    self.stop_loss = price + 2 * atr
-                    self.take_profit = price - 4 * atr
+                    self.stop_loss = price + 1 * atr  
+                    self.take_profit = price - 2 * atr
                     logger.info(f"Sell signal - MA cross with RSI: {rsi:.2f}, ATR: {atr:.8f}")
                     self.position = "sell"
                     return "sell"
@@ -134,8 +143,8 @@ class MovingAverageCrossover:
 
     def calculate_trend_strength(self):
         if len(self.trend_ma) == self.trend_window:
-            trend_start = self.calculate_ma(list(self.trend_ma)[:10])
-            trend_end = self.calculate_ma(list(self.trend_ma)[-10:])
+            trend_start = self.calculate_ma(list(self.trend_ma)[:3]) 
+            trend_end = self.calculate_ma(list(self.trend_ma)[-3:])
             return (trend_end - trend_start) / trend_start if trend_start and trend_start > 0 else 0
         return 0
 
@@ -150,11 +159,6 @@ class MovingAverageCrossover:
         if len(self.atr_values) == self.atr_period:
             return sum(self.atr_values) / self.atr_period
         return 0
-
-    def calculate_position_size(self, account_balance, price):
-        risk_amount = account_balance * self.risk_per_trade
-        position_size = risk_amount / (2 * self.calculate_atr())
-        return position_size
 
     def reset(self):
         self.short_ma.clear()
