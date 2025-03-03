@@ -11,11 +11,11 @@ from backtesting.historical_data import HistoricalData
 
 async def backtest_strategy(strategy_name, symbol='BTCUSDT', timeframe='1h', days=3, candle_limit=1000, mode='big'):
     if mode == 'big':
-        days = 10 
-        candle_limit = 50000
+        days = 1
+        candle_limit = 5000
     else: 
         days = 30
-        candle_limit = 50000
+        candle_limit = 43200
         
     logger.info(f"Backtesting {strategy_name} strategy on {symbol} {timeframe} for {days} days (max {candle_limit} candles) - Mode: {mode}")
     
@@ -177,7 +177,7 @@ async def backtest_strategy(strategy_name, symbol='BTCUSDT', timeframe='1h', day
         }
         
 async def run_all_backtests(mode='big'):
-    strategies = ['bonk_roulette','bonk_quant']
+    strategies = ['bonk_roulette','bonk_quant', 'moving_average', 'momentum_surge','order_book_imbalance']
     symbols = ['BONKUSDT']
     timeframes = ['1m']
     
@@ -240,9 +240,8 @@ Generated on: {datetime.now().isoformat()}
         f.write(markdown)
 
 if __name__ == "__main__":
-    mode = 'big'  # Default to big mode
+    mode = 'big' 
     
-    # Check for command line arguments
     if len(sys.argv) > 1 and sys.argv[1].lower() == 'small':
         mode = 'small'
         

@@ -12,20 +12,30 @@ class Config:
             os.path.dirname(os.path.dirname(__file__)), 
             'config.json'
         )
+        # Add file permission check
+        self._check_file_permissions()
         self.config = self._load_config()
         
-    def _load_config(self):
-        """Load configuration from file or create default"""
+    def _check_file_permissions(self):
+        """Check and fix file permissions for config file"""
         if os.path.exists(self.config_file):
-            try:
-                with open(self.config_file, 'r') as f:
-                    return json.load(f)
-            except Exception as e:
-                logging.error(f"Error loading config file: {str(e)}")
+            import stat
+            current_permissions = os.stat(self.config_file).st_mode
+            if current_permissions & stat.S_IROTH or current_permissions & stat.S_IWOTH:
+                logger.warning(f"Config file has too open permissions, restricting access")
+                os.chmod(self.config_file, stat.S_IRUSR | stat.S_IWUSR)
+        def _load_config(self):
+            """Load configuration from file or create default"""
+            if os.path.exists(self.config_file):
+                try:
+                    with open(self.config_file, 'r') as f:
+                        return json.load(f)
+                except Exception as e:
+                    logging.error(f"Error loading config file: {str(e)}")
+                    return self._create_default_config()
+            else:
                 return self._create_default_config()
-        else:
-            return self._create_default_config()
-            
+                
     def _create_default_config(self):
         """Create and save default configuration"""
         default_config = {
@@ -49,11 +59,14 @@ class Config:
                 }
             },
             "risk_management": {
-                "trailing_stop_loss": 0.02
+                "trailing_stop_loss": 0.02,
+                "max_daily_loss": 0.05,  # Add maximum daily loss limit
+                "max_open_trades": 3     # Add maximum concurrent trades
             },
             "api": {
                 "binance_api_key": os.getenv("BINANCE_API_KEY", ""),
-                "binance_api_secret": os.getenv("BINANCE_API_SECRET", "")
+                "binance_api_secret": os.getenv("BINANCE_API_SECRET", ""),
+                "api_key_encrypted": False
             }
         }
         

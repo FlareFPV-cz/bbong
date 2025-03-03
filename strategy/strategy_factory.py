@@ -2,6 +2,7 @@ from strategy.momentum_surge import MomentumSurge
 from strategy.moving_average import MovingAverageCrossover
 from strategy.bonk_roulette import BonkRoulette
 from strategy.bonk_quant import BonkQuant
+from strategy.order_book_imbalance import OrderBookImbalance
 from utils.logger import strategy_logger as logger
 
 class StrategyFactory:
@@ -21,6 +22,9 @@ class StrategyFactory:
         elif strategy_name.lower() == "bonk_quant":
             logger.info(f"Creating BonkQuant strategy with params: {params}")
             return BonkQuant(**params)
+        elif strategy_name.lower() == "order_book_imbalance":
+            logger.info(f"Creating OrderBookImbalance strategy with params: {params}")
+            return OrderBookImbalance(**params)
         else:
             logger.warning(f"Unknown strategy: {strategy_name}, defaulting to MomentumSurge")
             return MomentumSurge(**params)

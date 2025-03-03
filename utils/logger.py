@@ -41,3 +41,17 @@ market_data_logger = create_child_logger('market_data')
 execution_logger = create_child_logger('execution')
 risk_logger = create_child_logger('risk')
 strategy_logger = create_child_logger('strategy')
+
+# Add rotating file handler for error logs
+error_log_file = os.path.join(log_dir, 'error.log')
+error_file_handler = RotatingFileHandler(
+    error_log_file,
+    maxBytes=5*1024*1024,  # 5MB
+    backupCount=3
+)
+error_file_handler.setLevel(logging.ERROR)
+error_file_handler.setFormatter(log_format)
+logger.addHandler(error_file_handler)
+
+# Add performance logger
+performance_logger = create_child_logger('performance')
