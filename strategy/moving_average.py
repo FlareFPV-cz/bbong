@@ -3,7 +3,8 @@ from utils.logger import strategy_logger as logger
 import numpy as np
 
 class MovingAverageCrossover:
-    def __init__(self, short_window=8, long_window=21, trend_window=50, min_trend_strength=0.002, rsi_period=14, timeframe='1m', atr_period=14, risk_per_trade=0.01):
+    def __init__(self, short_window=8, long_window=21, trend_window=50, min_trend_strength=0.002, 
+             rsi_period=14, timeframe='1m', atr_period=14, risk_per_trade=0.01):
         self.short_window = short_window
         self.long_window = long_window
         self.trend_window = trend_window
@@ -32,33 +33,43 @@ class MovingAverageCrossover:
         logger.info(f"Initialized MovingAverageCrossover with enhanced parameters")
 
     def _get_timeframe_ms(self, timeframe):
-        unit = timeframe[-1]
+        valid_timeframes = ['1m', '3m', '5m']
+        if timeframe not in valid_timeframes:
+            logger.warning(f"Invalid timeframe {timeframe}, defaulting to 1m")
+            return 60 * 1000
+            
         value = int(timeframe[:-1])
-        if unit == 'm':
-            return value * 60 * 1000
-        elif unit == 'h':
-            return value * 60 * 60 * 1000
+        return value * 60 * 1000
         return 60 * 1000  
 
-    def update(self, price, timestamp=None):
-        if self.current_candle['open'] is None:
-            self.current_candle = {'open': price, 'high': price, 'low': price, 'close': price, 'volume': 0}
-            self.last_update = timestamp
-        else:
-            self.current_candle['high'] = max(self.current_candle['high'], price)
-            self.current_candle['low'] = min(self.current_candle['low'], price)
-            self.current_candle['close'] = price
-
-        if timestamp and self.last_update and (timestamp - self.last_update >= self.timeframe_ms):
-            candle_price = self.current_candle['close']
+    def update(self, price, timestamp=None, candle=None):
+        if candle:
+            self.current_candle = candle
+            candle_price = candle['close']
             self.short_ma.append(candle_price)
             self.long_ma.append(candle_price)
             self.trend_ma.append(candle_price)
             self.price_history.append(candle_price)
             self.update_atr(candle_price)
+        else:
+            if self.current_candle['open'] is None:
+                self.current_candle = {'open': price, 'high': price, 'low': price, 'close': price, 'volume': 0}
+                self.last_update = timestamp
+            else:
+                self.current_candle['high'] = max(self.current_candle['high'], price)
+                self.current_candle['low'] = min(self.current_candle['low'], price)
+                self.current_candle['close'] = price
 
-            self.current_candle = {'open': price, 'high': price, 'low': price, 'close': price, 'volume': 0}
-            self.last_update = timestamp
+            if timestamp and self.last_update and (timestamp - self.last_update >= self.timeframe_ms):
+                candle_price = self.current_candle['close']
+                self.short_ma.append(candle_price)
+                self.long_ma.append(candle_price)
+                self.trend_ma.append(candle_price)
+                self.price_history.append(candle_price)
+                self.update_atr(candle_price)
+
+                self.current_candle = {'open': price, 'high': price, 'low': price, 'close': price, 'volume': 0}
+                self.last_update = timestamp
 
         if (len(self.short_ma) == self.short_window and 
             len(self.long_ma) == self.long_window and 

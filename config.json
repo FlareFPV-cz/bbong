@@ -1,0 +1,28 @@
+{
+    "trading": {
+        "symbol": "bonkusdt",
+        "risk_percent": 0.01,
+        "initial_balance": 1000,
+        "simulate": true
+    },
+    "strategy": {
+        "name": "moving_average",
+        "params": {
+            "short_window": 2,
+            "long_window": 10,
+            "trend_window": 15,
+            "min_trend_strength": 0.005,
+            "rsi_period": 10,
+            "timeframe": "1m",
+            "atr_period": 10,
+            "risk_per_trade": 0.03
+        }
+    },
+    "risk_management": {
+        "trailing_stop_loss": 0.02
+    },
+    "api": {
+        "binance_api_key": "your_api_key",
+        "binance_api_secret": "your_api_secret"
+    }
+}

@@ -3,11 +3,12 @@ from utils.logger import strategy_logger as logger
 import numpy as np
 
 class MomentumSurge:
-    def __init__(self, short_window=2, long_window=10, trend_window=15, min_trend_strength=0.005, rsi_period=10, timeframe='1m', atr_period=10, risk_per_trade=0.03):
+    def __init__(self, short_window=2, long_window=5, trend_window=10, min_trend_strength=0.001,
+             rsi_period=7, timeframe='1m', atr_period=7, risk_per_trade=0.03):
         self.short_window = short_window
         self.long_window = long_window
         self.trend_window = trend_window
-        self.min_trend_strength = min_trend_strength
+        self.min_trend_strength = min_trend_strength 
         self.rsi_period = rsi_period
         self.timeframe = timeframe
         self.atr_period = atr_period
@@ -29,7 +30,7 @@ class MomentumSurge:
         self.stop_loss = None
         self.take_profit = None
         
-        logger.info(f"Initialized MomentumSurge with aggressive parameters")
+        logger.info(f"Initialized MomentumSurge with more aggressive parameters: short_window={short_window}, long_window={long_window}, min_trend_strength={min_trend_strength}")
 
     def _get_timeframe_ms(self, timeframe):
         unit = timeframe[-1]
@@ -79,24 +80,19 @@ class MomentumSurge:
             rsi = self.calculate_rsi(price)
             atr = self.calculate_atr()
 
-            logger.debug(f"MAs - Short: {short_avg:.8f}, Long: {long_avg:.8f}, "
-                        f"Trend Strength: {trend_strength:.4%}, RSI: {rsi:.2f}, ATR: {atr:.8f}")
-
             if abs(trend_strength) >= self.min_trend_strength:
-                if (short_avg > long_avg and trend_strength > 0 and 
-                    self.position != "buy" and rsi > 50):
+                if (short_avg > long_avg and 
+                    self.position != "buy" and rsi > 45): 
                     self.entry_price = price
-                    self.stop_loss = price - 1 * atr 
-                    self.take_profit = price + 2 * atr  
-                    logger.info(f"Buy signal - MA cross with RSI: {rsi:.2f}, ATR: {atr:.8f}")
+                    self.stop_loss = price - 1 * atr  
+                    self.take_profit = price + 1.5 * atr 
                     self.position = "buy"
                     return "buy"
-                elif (short_avg < long_avg and trend_strength < 0 and 
-                      self.position != "sell" and rsi < 50): 
+                elif (short_avg < long_avg and 
+                      self.position != "sell" and rsi < 55): 
                     self.entry_price = price
-                    self.stop_loss = price + 1 * atr  
-                    self.take_profit = price - 2 * atr
-                    logger.info(f"Sell signal - MA cross with RSI: {rsi:.2f}, ATR: {atr:.8f}")
+                    self.stop_loss = price + 1 * atr
+                    self.take_profit = price - 1.5 * atr
                     self.position = "sell"
                     return "sell"
 
