@@ -11,8 +11,8 @@ from backtesting.historical_data import HistoricalData
 
 async def backtest_strategy(strategy_name, symbol='BTCUSDT', timeframe='1h', days=3, candle_limit=1000, mode='big'):
     if mode == 'big':
-        days = 1
-        candle_limit = 5000
+        days = 365
+        candle_limit = 525600
     else: 
         days = 30
         candle_limit = 43200
@@ -31,7 +31,6 @@ async def backtest_strategy(strategy_name, symbol='BTCUSDT', timeframe='1h', day
     highest_balance = initial_balance
     lowest_balance = initial_balance
     
-    # Get historical data
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days)
     
@@ -177,7 +176,7 @@ async def backtest_strategy(strategy_name, symbol='BTCUSDT', timeframe='1h', day
         }
         
 async def run_all_backtests(mode='big'):
-    strategies = ['bonk_roulette','bonk_quant', 'moving_average', 'momentum_surge','order_book_imbalance']
+    strategies = ['bonk_quant']
     symbols = ['BONKUSDT']
     timeframes = ['1m']
     
@@ -205,11 +204,11 @@ async def run_all_backtests(mode='big'):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     mode_suffix = f"_{mode}" if mode != 'big' else ""
     
-    json_file = os.path.join(results_dir, f"backtest_results{mode_suffix}_{timestamp}.json")
+    json_file = os.path.join(results_dir, f"json/backtest_results{mode_suffix}_{timestamp}.json")
     with open(json_file, 'w') as f:
         json.dump(results, f, indent=2)
     
-    report_file = os.path.join(results_dir, f"backtest_report{mode_suffix}_{timestamp}.md")
+    report_file = os.path.join(results_dir, f"md/backtest_report{mode_suffix}_{timestamp}.md")
     generate_markdown_report(results, report_file, mode)
     
     return report_file
@@ -224,20 +223,68 @@ Generated on: {datetime.now().isoformat()}
     sorted_results = sorted(results, key=lambda x: float(x.get('total_return', 0)), reverse=True)
     
     for result in sorted_results:
+        # Calculate additional statistics
+        trades = result.get('trades', 0)
+        win_rate = result.get('win_rate', 0)
+        total_return = result.get('total_return', 0)
+        initial_balance = result.get('initial_balance', 1000)
+        final_balance = result.get('final_balance', 1000)
+        highest_balance = result.get('highest_balance', 1000)
+        lowest_balance = result.get('lowest_balance', 1000)
+        candles_processed = result.get('candles_processed', 0)
+        
+        # Calculate drawdown percentage
+        max_drawdown_pct = ((highest_balance - lowest_balance) / highest_balance * 100) if highest_balance > 0 else 0
+        
+        # Calculate profit factor if possible
+        equity_curve = result.get('equity_curve', [])
+        if len(equity_curve) > 1:
+            daily_returns = []
+            for i in range(1, len(equity_curve)):
+                prev_equity = equity_curve[i-1].get('equity', 0)
+                curr_equity = equity_curve[i].get('equity', 0)
+                if prev_equity > 0:
+                    daily_return = (curr_equity - prev_equity) / prev_equity * 100
+                    daily_returns.append(daily_return)
+            
+            # Calculate volatility (standard deviation of returns)
+            if daily_returns:
+                import numpy as np
+                volatility = np.std(daily_returns) if len(daily_returns) > 1 else 0
+                sharpe_ratio = (np.mean(daily_returns) / volatility) if volatility > 0 else 0
+            else:
+                volatility = 0
+                sharpe_ratio = 0
+        else:
+            volatility = 0
+            sharpe_ratio = 0
+        
         markdown += f"""### {result.get('strategy', 'Unknown')} - {result.get('symbol', 'Unknown')} {result.get('timeframe', 'Unknown')}
-- Trades: {result.get('trades', 0)}
-- Total Return: {result.get('total_return', 0):.2f}%
-- Win Rate: {result.get('win_rate', 0):.2f}%
-- Initial Balance: ${result.get('initial_balance', 1000):.2f}
-- Final Balance: ${result.get('final_balance', 1000):.2f}
-- Highest Balance: ${result.get('highest_balance', 1000):.2f}
-- Lowest Balance: ${result.get('lowest_balance', 1000):.2f}
-- Candles Processed: {result.get('candles_processed', 0)}
 
-"""
-    
-    with open(report_file, 'w') as f:
-        f.write(markdown)
+        #### Performance Metrics
+        - **Trades**: {trades}
+        - **Win Rate**: {win_rate:.2f}%
+        - **Total Return**: {total_return:.2f}%
+        - **Max Drawdown**: {max_drawdown_pct:.2f}%
+        - **Volatility**: {volatility:.2f}%
+        - **Sharpe Ratio**: {sharpe_ratio:.2f}
+        
+        #### Account Statistics
+        - **Initial Balance**: ${initial_balance:.2f}
+        - **Final Balance**: ${final_balance:.2f}
+        - **Highest Balance**: ${highest_balance:.2f}
+        - **Lowest Balance**: ${lowest_balance:.2f}
+        
+        #### Backtest Information
+        - **Candles Processed**: {candles_processed}
+        - **Mode**: {mode.upper()}
+        - **Timeframe**: {result.get('timeframe', 'Unknown')}
+        - **Symbol**: {result.get('symbol', 'Unknown')}
+        
+        """
+        
+        with open(report_file, 'w') as f:
+            f.write(markdown)
 
 if __name__ == "__main__":
     mode = 'big' 

@@ -5,8 +5,8 @@ import time
 
 class OrderBookImbalance:
     def __init__(self, rsi_period=4, macd_fast=12, macd_slow=26, macd_signal=9, 
-                 delta_window=20, imbalance_threshold=0.02, timeframe='1m',
-                 risk_per_trade=0.02, slippage_tolerance=0.001):
+        delta_window=20, imbalance_threshold=0.005, timeframe='1m',  # Reduced threshold for more signals
+        risk_per_trade=0.02, slippage_tolerance=0.001):
         self.rsi_period = rsi_period
         self.macd_fast = macd_fast
         self.macd_slow = macd_slow
@@ -38,6 +38,8 @@ class OrderBookImbalance:
         self.stop_loss = None
         self.take_profit = None
         self.execution_time = None
+        self.win_count = 0
+        self.loss_count = 0
         
         # Candle data
         self.current_candle = {'open': None, 'high': None, 'low': None, 'close': None, 'volume': 0}
@@ -116,14 +118,13 @@ class OrderBookImbalance:
         # Check for order book imbalance
         imbalance_detected, imbalance_direction = self.detect_order_book_imbalance()
         
-        # Entry logic
         if not self.position:
             # Buy signal: RSI oversold + positive delta divergence + buy imbalance
-            if (rsi < 30 and rsi > self.rsi_values[-1] if self.rsi_values else False) and \
-               cumulative_delta > 0 and imbalance_detected and imbalance_direction == "buy":
+            if (rsi < 40 and cumulative_delta > 0 and imbalance_detected and 
+                imbalance_direction == "buy"):  # Less restrictive RSI condition
                 self.entry_price = price
                 self.position = "buy"
-                self.stop_loss = price * (1 - self.slippage_tolerance * 2)
+                self.stop_loss = price * (1 - self.slippage_tolerance * 2.5)  # Wider stop loss
                 self.take_profit = self.calculate_take_profit(price, "buy")
                 self.execution_time = time.time() - start_time
                 logger.info(f"BUY signal - RSI: {rsi:.2f}, Delta: {cumulative_delta:.2f}, "
@@ -131,35 +132,39 @@ class OrderBookImbalance:
                 return "buy"
                 
             # Sell signal: RSI overbought + negative delta divergence + sell imbalance
-            elif (rsi > 70 and rsi < self.rsi_values[-1] if self.rsi_values else False) and \
-                 cumulative_delta < 0 and imbalance_detected and imbalance_direction == "sell":
+            elif (rsi > 60 and cumulative_delta < 0 and imbalance_detected and 
+                  imbalance_direction == "sell"):  # Less restrictive RSI condition
                 self.entry_price = price
                 self.position = "sell"
-                self.stop_loss = price * (1 + self.slippage_tolerance * 2)
+                self.stop_loss = price * (1 + self.slippage_tolerance * 2.5)  # Wider stop loss
                 self.take_profit = self.calculate_take_profit(price, "sell")
                 self.execution_time = time.time() - start_time
                 logger.info(f"SELL signal - RSI: {rsi:.2f}, Delta: {cumulative_delta:.2f}, "
                            f"Execution time: {self.execution_time*1000:.2f}ms")
                 return "sell"
-        
+                
         # Exit logic for stop loss
         if self.position == "buy" and price <= self.stop_loss:
             logger.info(f"Stop-loss triggered at {price:.8f}")
             self.position = None
+            self.loss_count += 1
             return "stop_loss"
         elif self.position == "sell" and price >= self.stop_loss:
             logger.info(f"Stop-loss triggered at {price:.8f}")
             self.position = None
+            self.loss_count += 1
             return "stop_loss"
         
         # Exit logic for take profit
         if self.position == "buy" and price >= self.take_profit:
             logger.info(f"Take-profit triggered at {price:.8f}")
             self.position = None
+            self.win_count += 1
             return "take_profit"
         elif self.position == "sell" and price <= self.take_profit:
             logger.info(f"Take-profit triggered at {price:.8f}")
             self.position = None
+            self.win_count += 1
             return "take_profit"
         
         return None
@@ -282,8 +287,8 @@ class OrderBookImbalance:
         return None
 
     def detect_order_book_imbalance(self):
-        # Check if we have recent order book data
-        if not self.market_depth or time.time() - self.last_depth_update > 5:
+        # Check if we have recent order book data - extended time window
+        if not self.market_depth or time.time() - self.last_depth_update > 10:  # Extended from 5 to 10 seconds
             return False, None
             
         # Check for significant imbalance
@@ -335,4 +340,6 @@ class OrderBookImbalance:
         self.entry_price = None
         self.stop_loss = None
         self.take_profit = None
+        self.win_count = 0
+        self.loss_count = 0
         logger.info("OrderBookImbalance strategy reset")

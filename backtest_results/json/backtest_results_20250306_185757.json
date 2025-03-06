@@ -1,0 +1,21 @@
+[
+  {
+    "strategy": "bonk_quant",
+    "symbol": "BONKUSDT",
+    "timeframe": "1m",
+    "candles_processed": 40740,
+    "trades": 0,
+    "total_return": 0,
+    "win_rate": 0,
+    "initial_balance": 1000,
+    "final_balance": 1000,
+    "highest_balance": 1000,
+    "lowest_balance": 1000,
+    "equity_curve": [
+      {
+        "timestamp": "2025-03-06T18:48:12.128038",
+        "equity": 1000
+      }
+    ]
+  }
+]

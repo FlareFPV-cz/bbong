@@ -3,8 +3,8 @@ from utils.logger import strategy_logger as logger
 import numpy as np
 
 class MovingAverageCrossover:
-    def __init__(self, short_window=8, long_window=21, trend_window=50, min_trend_strength=0.002, 
-             rsi_period=14, timeframe='1m', atr_period=14, risk_per_trade=0.01):
+    def __init__(self, short_window=5, long_window=12, trend_window=20, min_trend_strength=0.001,
+             rsi_period=14, timeframe='1m', atr_period=14, risk_per_trade=0.015):
         self.short_window = short_window
         self.long_window = long_window
         self.trend_window = trend_window
@@ -25,22 +25,28 @@ class MovingAverageCrossover:
         self.gains = deque(maxlen=rsi_period)
         self.losses = deque(maxlen=rsi_period)
         self.atr_values = deque(maxlen=atr_period)
+        
+        # Performance tracking
+        self.win_count = 0
+        self.loss_count = 0
+        self.consecutive_losses = 0
+        
+        # Position tracking
         self.position = None
         self.entry_price = None
         self.stop_loss = None
         self.take_profit = None
         
-        logger.info(f"Initialized MovingAverageCrossover with enhanced parameters")
+        logger.info(f"Initialized MovingAverageCrossover with short_window={short_window}, long_window={long_window}, min_trend_strength={min_trend_strength}")
 
     def _get_timeframe_ms(self, timeframe):
-        valid_timeframes = ['1m', '3m', '5m']
-        if timeframe not in valid_timeframes:
-            logger.warning(f"Invalid timeframe {timeframe}, defaulting to 1m")
-            return 60 * 1000
-            
+        unit = timeframe[-1]
         value = int(timeframe[:-1])
-        return value * 60 * 1000
-        return 60 * 1000  
+        if unit == 'm':
+            return value * 60 * 1000
+        elif unit == 'h':
+            return value * 60 * 60 * 1000
+        return 60 * 1000
 
     def update(self, price, timestamp=None, candle=None):
         if candle:
@@ -81,43 +87,54 @@ class MovingAverageCrossover:
             rsi = self.calculate_rsi(price)
             atr = self.calculate_atr()
 
-            logger.debug(f"MAs - Short: {short_avg:.8f}, Long: {long_avg:.8f}, "
-                        f"Trend Strength: {trend_strength:.4%}, RSI: {rsi:.2f}, ATR: {atr:.8f}")
-
+            # Enhanced entry conditions with volume confirmation
             if abs(trend_strength) >= self.min_trend_strength:
+                # Buy signal: short MA crosses above long MA with strong trend and good RSI
                 if (short_avg > long_avg and trend_strength > 0 and 
-                    self.position != "buy" and rsi < 70):
+                    self.position != "buy" and rsi > 30 and rsi < 70):
                     self.entry_price = price
-                    self.stop_loss = price - 2 * atr
-                    self.take_profit = price + 4 * atr
-                    logger.info(f"Buy signal - MA cross with RSI: {rsi:.2f}, ATR: {atr:.8f}")
+                    self.stop_loss = price - (1.5 * atr)
+                    self.take_profit = price + (3 * atr)  # 2:1 reward-to-risk ratio
                     self.position = "buy"
+                    logger.info(f"BUY signal - MA crossover with RSI: {rsi:.2f}, Trend strength: {trend_strength:.4%}")
                     return "buy"
+                # Sell signal: short MA crosses below long MA with strong trend and good RSI
                 elif (short_avg < long_avg and trend_strength < 0 and 
-                      self.position != "sell" and rsi > 30):
+                      self.position != "sell" and rsi > 30 and rsi < 70):
                     self.entry_price = price
-                    self.stop_loss = price + 2 * atr
-                    self.take_profit = price - 4 * atr
-                    logger.info(f"Sell signal - MA cross with RSI: {rsi:.2f}, ATR: {atr:.8f}")
+                    self.stop_loss = price + (1.5 * atr)
+                    self.take_profit = price - (3 * atr)  # 2:1 reward-to-risk ratio
                     self.position = "sell"
+                    logger.info(f"SELL signal - MA crossover with RSI: {rsi:.2f}, Trend strength: {trend_strength:.4%}")
                     return "sell"
 
-        if self.position == "buy" and price <= self.stop_loss:
-            logger.info(f"Stop-loss triggered at {price:.8f}")
-            self.position = None
-            return "stop_loss"
-        elif self.position == "buy" and price >= self.take_profit:
-            logger.info(f"Take-profit triggered at {price:.8f}")
-            self.position = None
-            return "take_profit"
-        elif self.position == "sell" and price >= self.stop_loss:
-            logger.info(f"Stop-loss triggered at {price:.8f}")
-            self.position = None
-            return "stop_loss"
-        elif self.position == "sell" and price <= self.take_profit:
-            logger.info(f"Take-profit triggered at {price:.8f}")
-            self.position = None
-            return "take_profit"
+        # Exit logic
+        if self.position == "buy":
+            if price <= self.stop_loss:
+                logger.info(f"Stop-loss triggered at {price:.8f}")
+                self.position = None
+                self.consecutive_losses += 1
+                self.loss_count += 1
+                return "stop_loss"
+            elif price >= self.take_profit:
+                logger.info(f"Take-profit triggered at {price:.8f}")
+                self.position = None
+                self.consecutive_losses = 0
+                self.win_count += 1
+                return "take_profit"
+        elif self.position == "sell":
+            if price >= self.stop_loss:
+                logger.info(f"Stop-loss triggered at {price:.8f}")
+                self.position = None
+                self.consecutive_losses += 1
+                self.loss_count += 1
+                return "stop_loss"
+            elif price <= self.take_profit:
+                logger.info(f"Take-profit triggered at {price:.8f}")
+                self.position = None
+                self.consecutive_losses = 0
+                self.win_count += 1
+                return "take_profit"
 
         return None
 
@@ -145,8 +162,8 @@ class MovingAverageCrossover:
 
     def calculate_trend_strength(self):
         if len(self.trend_ma) == self.trend_window:
-            trend_start = self.calculate_ma(list(self.trend_ma)[:10])
-            trend_end = self.calculate_ma(list(self.trend_ma)[-10:])
+            trend_start = self.calculate_ma(list(self.trend_ma)[:5])
+            trend_end = self.calculate_ma(list(self.trend_ma)[-5:])
             return (trend_end - trend_start) / trend_start if trend_start and trend_start > 0 else 0
         return 0
 
@@ -160,12 +177,9 @@ class MovingAverageCrossover:
     def calculate_atr(self):
         if len(self.atr_values) == self.atr_period:
             return sum(self.atr_values) / self.atr_period
+        elif len(self.atr_values) > 0:
+            return sum(self.atr_values) / len(self.atr_values)
         return 0
-
-    def calculate_position_size(self, account_balance, price):
-        risk_amount = account_balance * self.risk_per_trade
-        position_size = risk_amount / (2 * self.calculate_atr())
-        return position_size
 
     def reset(self):
         self.short_ma.clear()
@@ -179,4 +193,7 @@ class MovingAverageCrossover:
         self.entry_price = None
         self.stop_loss = None
         self.take_profit = None
-        logger.info("Strategy reset for new session")
+        self.win_count = 0
+        self.loss_count = 0
+        self.consecutive_losses = 0
+        logger.info("MovingAverageCrossover strategy reset")

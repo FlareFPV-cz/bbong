@@ -3,12 +3,12 @@ from utils.logger import strategy_logger as logger
 import numpy as np
 
 class MomentumSurge:
-    def __init__(self, short_window=2, long_window=5, trend_window=10, min_trend_strength=0.001,
-             rsi_period=7, timeframe='1m', atr_period=7, risk_per_trade=0.03):
+    def __init__(self, short_window=2, long_window=5, trend_window=10, min_trend_strength=0.0008,
+             rsi_period=9, timeframe='1m', atr_period=10, risk_per_trade=0.02):
         self.short_window = short_window
         self.long_window = long_window
         self.trend_window = trend_window
-        self.min_trend_strength = min_trend_strength 
+        self.min_trend_strength = min_trend_strength  # Reduced to capture more opportunities
         self.rsi_period = rsi_period
         self.timeframe = timeframe
         self.atr_period = atr_period
@@ -25,12 +25,21 @@ class MomentumSurge:
         self.gains = deque(maxlen=rsi_period)
         self.losses = deque(maxlen=rsi_period)
         self.atr_values = deque(maxlen=atr_period)
+        
+        # Performance tracking
+        self.win_count = 0
+        self.loss_count = 0
+        self.consecutive_losses = 0
+        
+        # Position tracking
         self.position = None
         self.entry_price = None
         self.stop_loss = None
         self.take_profit = None
+        self.trailing_stop_active = False
+        self.trailing_stop_price = None
         
-        logger.info(f"Initialized MomentumSurge with more aggressive parameters: short_window={short_window}, long_window={long_window}, min_trend_strength={min_trend_strength}")
+        logger.info(f"Initialized Enhanced MomentumSurge with short_window={short_window}, long_window={long_window}, min_trend_strength={min_trend_strength}")
 
     def _get_timeframe_ms(self, timeframe):
         unit = timeframe[-1]
@@ -80,37 +89,65 @@ class MomentumSurge:
             rsi = self.calculate_rsi(price)
             atr = self.calculate_atr()
 
+            # Update trailing stop if active
+            if self.position and self.trailing_stop_active:
+                if self.position == "buy" and price > self.entry_price + (2 * atr):
+                    new_stop = price - (1.5 * atr)
+                    if new_stop > self.stop_loss:
+                        self.stop_loss = new_stop
+                        logger.info(f"Updated trailing stop to {self.stop_loss:.8f}")
+                elif self.position == "sell" and price < self.entry_price - (2 * atr):
+                    new_stop = price + (1.5 * atr)
+                    if new_stop < self.stop_loss:
+                        self.stop_loss = new_stop
+                        logger.info(f"Updated trailing stop to {self.stop_loss:.8f}")
+
+            # Less restrictive entry conditions
             if abs(trend_strength) >= self.min_trend_strength:
                 if (short_avg > long_avg and 
-                    self.position != "buy" and rsi > 45): 
+                    self.position != "buy" and rsi > 35 and rsi < 75): 
                     self.entry_price = price
-                    self.stop_loss = price - 1 * atr  
-                    self.take_profit = price + 1.5 * atr 
+                    self.stop_loss = price - 1.5 * atr  
+                    self.take_profit = price + 3 * atr  # Improved risk:reward ratio
                     self.position = "buy"
+                    self.trailing_stop_active = True
+                    self.trailing_stop_price = self.stop_loss
+                    logger.info(f"BUY signal - MA crossover with RSI: {rsi:.2f}, Trend strength: {trend_strength:.4%}")
                     return "buy"
                 elif (short_avg < long_avg and 
-                      self.position != "sell" and rsi < 55): 
+                      self.position != "sell" and rsi < 65 and rsi > 25): 
                     self.entry_price = price
-                    self.stop_loss = price + 1 * atr
-                    self.take_profit = price - 1.5 * atr
+                    self.stop_loss = price + 1.5 * atr
+                    self.take_profit = price - 3 * atr  # Improved risk:reward ratio
                     self.position = "sell"
+                    self.trailing_stop_active = True
+                    self.trailing_stop_price = self.stop_loss
+                    logger.info(f"SELL signal - MA crossover with RSI: {rsi:.2f}, Trend strength: {trend_strength:.4%}")
                     return "sell"
 
         if self.position == "buy" and price <= self.stop_loss:
             logger.info(f"Stop-loss triggered at {price:.8f}")
             self.position = None
+            self.consecutive_losses += 1
+            self.loss_count += 1
             return "stop_loss"
         elif self.position == "buy" and price >= self.take_profit:
             logger.info(f"Take-profit triggered at {price:.8f}")
             self.position = None
+            self.consecutive_losses = 0
+            self.win_count += 1
             return "take_profit"
         elif self.position == "sell" and price >= self.stop_loss:
             logger.info(f"Stop-loss triggered at {price:.8f}")
             self.position = None
+            self.consecutive_losses += 1
+            self.loss_count += 1
             return "stop_loss"
         elif self.position == "sell" and price <= self.take_profit:
             logger.info(f"Take-profit triggered at {price:.8f}")
             self.position = None
+            self.consecutive_losses = 0
+            self.win_count += 1
             return "take_profit"
 
         return None
@@ -139,8 +176,9 @@ class MomentumSurge:
 
     def calculate_trend_strength(self):
         if len(self.trend_ma) == self.trend_window:
-            trend_start = self.calculate_ma(list(self.trend_ma)[:3]) 
-            trend_end = self.calculate_ma(list(self.trend_ma)[-3:])
+            # Use more data points for better trend detection
+            trend_start = self.calculate_ma(list(self.trend_ma)[:4]) 
+            trend_end = self.calculate_ma(list(self.trend_ma)[-4:])
             return (trend_end - trend_start) / trend_start if trend_start and trend_start > 0 else 0
         return 0
 
@@ -154,6 +192,8 @@ class MomentumSurge:
     def calculate_atr(self):
         if len(self.atr_values) == self.atr_period:
             return sum(self.atr_values) / self.atr_period
+        elif len(self.atr_values) > 0:
+            return sum(self.atr_values) / len(self.atr_values)
         return 0
 
     def reset(self):
@@ -168,4 +208,9 @@ class MomentumSurge:
         self.entry_price = None
         self.stop_loss = None
         self.take_profit = None
-        logger.info("Strategy reset for new session")
+        self.trailing_stop_active = False
+        self.trailing_stop_price = None
+        self.win_count = 0
+        self.loss_count = 0
+        self.consecutive_losses = 0
+        logger.info("MomentumSurge strategy reset")
