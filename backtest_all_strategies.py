@@ -14,8 +14,8 @@ async def backtest_strategy(strategy_name, symbol='BTCUSDT', timeframe='1h', day
         days = 365
         candle_limit = 525600
     else: 
-        days = 30
-        candle_limit = 43200
+        days = 100
+        candle_limit = 144000
         
     logger.info(f"Backtesting {strategy_name} strategy on {symbol} {timeframe} for {days} days (max {candle_limit} candles) - Mode: {mode}")
     
@@ -177,7 +177,7 @@ async def backtest_strategy(strategy_name, symbol='BTCUSDT', timeframe='1h', day
         
 async def run_all_backtests(mode='big'):
     strategies = ['bonk_quant']
-    symbols = ['BONKUSDT']
+    symbols = ['BONKUSDT', 'ETHUSDT', 'BTCUSDT', 'SOLUSDT']
     timeframes = ['1m']
     
     results = []

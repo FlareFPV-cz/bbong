@@ -8,22 +8,22 @@ class BonkQuant:
     def __init__(self, ema_period: int = 50, bb_period: int = 20, bb_std: float = 2.0, 
                  atr_period: int = 14, rsi_period: int = 14, macd_fast: int = 12, 
                  macd_slow: int = 26, macd_signal: int = 9, volume_ma_period: int = 20, 
-                 timeframe: str = '1m', risk_per_trade: float = 0.02,
+                 timeframe: str = '1m', risk_per_trade: float = 0.05,
                  trailing_stop: bool = True, dynamic_tp: bool = True,
                  adx_period: int = 14, adx_threshold: int = 25,
-                 volatility_period: int = 20, max_daily_loss: float = 10) -> None:
+                 volatility_period: int = 20, max_daily_loss: float = 40) -> None:
         self.ema_period = ema_period
         self.ema_alpha = 2 / (ema_period + 1)
         self.ema_value = None
         
         self.bb_period = bb_period
         self.bb_std = bb_std
-        self.bb_squeeze_threshold = 0.08  # Reduced to be more selective in low volatility
+        self.bb_squeeze_threshold = 0.09  # Reduced to be more selective in low volatility
         
         self.atr_period = atr_period
         self.atr_values = deque(maxlen=atr_period)
-        self.atr_multiplier_sl = 1.2  # Tighter stops to minimize losses
-        self.atr_multiplier_tp = 2.5  # Increased for better reward/risk ratio
+        self.atr_multiplier_sl = 1.5  # Tighter stops to minimize losses
+        self.atr_multiplier_tp = 3.0  # Increased for better reward/risk ratio
         self.risk_per_trade = risk_per_trade
         self.trailing_stop = trailing_stop
         self.dynamic_tp = dynamic_tp
